@@ -1,0 +1,3 @@
+# Map local users to envelope-from
+nagios:nagios@example.com:smtp.example.com:587
+root:alerts@example.com:smtp.example.com:587

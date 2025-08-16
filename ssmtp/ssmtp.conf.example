@@ -1,0 +1,9 @@
+# Minimal sSMTP config (copy to ssmtp/ssmtp.conf and edit)
+root=postmaster
+mailhub=smtp.example.com:587
+AuthUser=your_smtp_user
+AuthPass=your_smtp_password
+UseSTARTTLS=YES
+UseTLS=YES
+FromLineOverride=YES
+hostname=monitoring.example.com

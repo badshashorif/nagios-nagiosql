@@ -1,0 +1,113 @@
+services:
+  db:
+    image: mariadb:10.6
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/db-root-password
+      MYSQL_DATABASE: nagiosql
+      MYSQL_USER: nagiosql
+      MYSQL_PASSWORD_FILE: /run/secrets/nagiosql-db-password
+      TZ: ${TZ}
+    volumes:
+      - db-data:/var/lib/mysql
+    secrets:
+      - db-root-password
+      - nagiosql-db-password
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -uroot -p$$(cat /run/secrets/db-root-password) --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [monnet]
+
+  nagios:
+    image: instantlinux/nagios:latest
+    restart: unless-stopped
+    environment:
+      AUTHORIZED_USERS: ${NAGIOS_AUTH_USERS}
+      TZ: ${TZ}
+    volumes:
+      - nagios-etc:/etc/nagios
+      - nagios-var:/var/nagios
+      - ./plugins:/opt/nagios/plugins:ro
+      - ./ssmtp/ssmtp.conf:/etc/ssmtp/ssmtp.conf:ro
+      - ./ssmtp/revaliases:/etc/ssmtp/revaliases:ro
+    secrets:
+      - nagios-htpasswd
+    depends_on:
+      - db
+    expose: ["80"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost | grep -qi nagios || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+    networks: [monnet]
+
+  nagiosql:
+    image: instantlinux/nagiosql:latest
+    restart: unless-stopped
+    environment:
+      DB_HOST: db
+      NAGIOS_ETC: /etc/nagios
+      TZ: ${TZ}
+    volumes:
+      - nagiosql-config:/var/www/nagiosql/config
+      - nagios-etc:/etc/nagios
+      - nagios-var:/var/nagios
+      - nagiosql-pear:/usr/share/pear
+      - ./nagiosql-apache/servername.conf:/etc/apache2/conf-enabled/servername.conf:ro
+      - ./nagiosql-apache/nagiosql-alias.conf:/etc/apache2/conf.d/nagiosql-alias.conf:ro
+      - ./nagiosql-php/zz-pear.ini:/etc/php82/conf.d/zz-pear.ini:ro
+    secrets:
+      - nagiosql-db-password
+    depends_on:
+      db:
+        condition: service_healthy
+      nagios:
+        condition: service_started
+    expose: ["80"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost | grep -qi nagiosql || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+    networks: [monnet]
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      NAGIOS_HOST: ${NAGIOS_HOST}
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - nagios
+      - nagiosql
+    networks: [monnet]
+
+networks:
+  monnet:
+    driver: bridge
+
+volumes:
+  db-data:
+  nagios-etc:
+  nagios-var:
+  nagiosql-config:
+  nagiosql-pear:
+  caddy-data:
+  caddy-config:
+
+secrets:
+  nagios-htpasswd:
+    file: ./secrets/nagios-htpasswd
+  db-root-password:
+    file: ./secrets/db-root-password
+  nagiosql-db-password:
+    file: ./secrets/nagiosql-db-password

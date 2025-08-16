@@ -1,0 +1,25 @@
+{
+  # Optional: email for ACME
+  # email you@example.com
+}
+
+# Use env var if present, otherwise serve on :80 only
+{$NAGIOS_HOST}:443, :80 {
+  encode gzip
+
+  @nagios path /nagios* /
+  handle @nagios {
+    reverse_proxy nagios:80
+  }
+
+  @nagiosql path /nagiosql* /nagiosql/*
+  handle @nagiosql {
+    reverse_proxy nagiosql:80
+  }
+
+  # Auto HTTPS / redirects handled by Caddy
+  log {
+    output stdout
+    format console
+  }
+}
